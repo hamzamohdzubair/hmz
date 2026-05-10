@@ -48,6 +48,10 @@ pub fn run(remote: &str) -> Result<()> {
         restore_dotfile_symlink(dotfile)?;
     }
 
+    for path in &mf.windows {
+        restore_windows_dotfile(path)?;
+    }
+
     crate::cron::install()?;
 
     println!("Done.");
@@ -62,7 +66,9 @@ pub fn add(target: &str) -> Result<()> {
 
     let mut mf = manifest::load()?;
 
-    if is_path(target) {
+    if is_windows_path(target) {
+        add_windows_dotfile(target, &mut mf)?;
+    } else if is_path(target) {
         add_dotfile(target, &mut mf)?;
     } else {
         add_app(target, &mut mf)?;
@@ -70,6 +76,10 @@ pub fn add(target: &str) -> Result<()> {
 
     manifest::save(&mf)?;
     Ok(())
+}
+
+fn is_windows_path(s: &str) -> bool {
+    s.starts_with("/mnt/")
 }
 
 fn is_path(s: &str) -> bool {
@@ -127,6 +137,34 @@ fn add_dotfile(input: &str, mf: &mut Manifest) -> Result<()> {
         mf.dotfiles.push(canonical.clone());
     }
     println!("Added dotfile '{}'.", canonical);
+    Ok(())
+}
+
+fn add_windows_dotfile(input: &str, mf: &mut Manifest) -> Result<()> {
+    let src = std::path::PathBuf::from(input);
+    if !src.exists() {
+        anyhow::bail!("{} does not exist", src.display());
+    }
+    if mf.windows.contains(&input.to_string()) {
+        anyhow::bail!("{} is already managed", input);
+    }
+    let dst = paths::repo_windows_path(&src);
+    ensure_parent(&dst)?;
+    fs::copy(&src, &dst)
+        .with_context(|| format!("copying {} to {}", src.display(), dst.display()))?;
+    mf.windows.push(input.to_string());
+    println!("Added Windows dotfile '{}'.", input);
+    Ok(())
+}
+
+fn restore_windows_dotfile(path: &str) -> Result<()> {
+    let dst = std::path::PathBuf::from(path);
+    let src = paths::repo_windows_path(&dst);
+    if src.exists() && !dst.exists() {
+        ensure_parent(&dst)?;
+        fs::copy(&src, &dst)
+            .with_context(|| format!("restoring {}", path))?;
+    }
     Ok(())
 }
 

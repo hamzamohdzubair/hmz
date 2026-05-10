@@ -37,3 +37,9 @@ pub fn xdg_config(app: &str) -> PathBuf {
 pub fn home() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
+
+/// Maps a /mnt/<drive>/... path to repo_dir()/windows/<drive>/...
+pub fn repo_windows_path(src: &std::path::Path) -> PathBuf {
+    let without_mnt = src.strip_prefix("/mnt/").unwrap_or(src);
+    repo_dir().join("windows").join(without_mnt)
+}

@@ -66,5 +66,11 @@ fn ls() -> anyhow::Result<()> {
             println!("  {}", d);
         }
     }
+    if !mf.windows.is_empty() {
+        println!("Windows dotfiles:");
+        for w in &mf.windows {
+            println!("  {}", w);
+        }
+    }
     Ok(())
 }

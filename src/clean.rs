@@ -27,6 +27,8 @@ pub fn run() -> Result<()> {
         remove_symlink(&src);
     }
 
+    // Windows dotfiles are plain copies — nothing to remove on the Windows side.
+
     crate::cron::remove()?;
 
     fs::remove_dir_all(&repo)
