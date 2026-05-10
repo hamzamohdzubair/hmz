@@ -1,32 +1,17 @@
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::paths;
-
-fn sync_windows_dotfiles() -> Result<()> {
-    let mf = crate::manifest::load()?;
-    for path in &mf.windows {
-        let src = std::path::PathBuf::from(path);
-        if src.exists() {
-            let dst = paths::repo_windows_path(&src);
-            if let Some(parent) = dst.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::copy(&src, &dst)
-                .with_context(|| format!("syncing {}", path))?;
-        }
-    }
-    Ok(())
-}
+use crate::{manifest, paths, registry};
+use crate::registry::Loc;
 
 pub fn run() -> Result<()> {
-    sync_windows_dotfiles()?;
-    let repo = paths::repo_dir();
+    sync_win_appdata()?;
 
+    let repo = paths::repo_dir();
     git(&repo, &["add", "."])?;
 
-    // Only commit if there are staged changes.
     let dirty = !Command::new("git")
         .args(["diff", "--cached", "--quiet"])
         .current_dir(&repo)
@@ -42,9 +27,7 @@ pub fn run() -> Result<()> {
         git(&repo, &["commit", "-m", &format!("backup {}", now)])?;
     }
 
-    // -u sets upstream on first push; no-op on subsequent pushes.
     git(&repo, &["push", "-u", "origin", "HEAD"])?;
-
     Ok(())
 }
 
@@ -54,6 +37,45 @@ pub fn status() -> Result<()> {
         .current_dir(paths::repo_dir())
         .status()
         .context("git not found")?;
+    Ok(())
+}
+
+fn sync_win_appdata() -> Result<()> {
+    if !paths::is_wsl() {
+        return Ok(());
+    }
+    let mf = manifest::load()?;
+    for name in &mf.apps {
+        let def = match registry::lookup(name) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        for loc in &def.locs {
+            if let Loc::WinAppData = loc {
+                let src = paths::win_appdata(name)?;
+                let dst = paths::repo_app_loc(name, loc.dir_name());
+                if src.exists() {
+                    copy_dir(&src, &dst)
+                        .with_context(|| format!("syncing win_appdata for {}", name))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let dst_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &dst_path)?;
+        } else {
+            std::fs::copy(entry.path(), &dst_path)
+                .with_context(|| format!("copying {}", entry.path().display()))?;
+        }
+    }
     Ok(())
 }
 

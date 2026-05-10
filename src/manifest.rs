@@ -6,9 +6,7 @@ pub struct Manifest {
     #[serde(default)]
     pub crates: Vec<String>,
     #[serde(default)]
-    pub dotfiles: Vec<String>,
-    #[serde(default)]
-    pub windows: Vec<String>,
+    pub apps: Vec<String>,
 }
 
 pub fn load() -> Result<Manifest> {

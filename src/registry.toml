@@ -1,0 +1,29 @@
+[nvim]
+locations = ["xdg_config", "xdg_data"]
+
+[tmux]
+locations = ["home:.tmux.conf"]
+
+[zsh]
+locations = ["home:.zshrc", "home:.zshenv"]
+
+[git]
+locations = ["home:.gitconfig"]
+
+[starship]
+locations = ["xdg_config"]
+
+[alacritty]
+locations = ["xdg_config"]
+
+[qutebrowser]
+locations = ["xdg_config", "xdg_data", "win_appdata"]
+
+[zellij]
+locations = ["xdg_config", "xdg_data"]
+
+[bottom]
+locations = ["xdg_config"]
+
+[wezterm]
+locations = ["xdg_config"]

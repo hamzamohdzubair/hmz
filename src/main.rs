@@ -3,6 +3,7 @@ mod clean;
 mod cron;
 mod manifest;
 mod paths;
+mod registry;
 mod setup;
 
 use clap::{Parser, Subcommand};
@@ -18,29 +19,32 @@ struct Cli {
 enum Command {
     /// Clone remote repo, install apps, create symlinks, register hourly backup
     Setup {
-        /// Git remote URL of your private backup repo
-        remote: String,
+        /// Git remote URL (uses built-in default if omitted)
+        remote: Option<String>,
     },
-    /// Add an app (by crate name) or dotfile (by path) to be managed
+    /// Add an app or crate to be managed
     Add {
-        /// Crate name (e.g. zen) or path (e.g. ~/.config/nvim)
-        target: String,
+        /// App or crate name (e.g. tmux, nvim, zellij)
+        name: String,
+        /// Install via cargo and manage as a crate
+        #[arg(long)]
+        cargo: bool,
     },
     /// Commit and push all changes to remote
     Backup,
     /// Show what has changed since last backup
     Status,
-    /// Remove all symlinks, uninstall apps, remove cron job, delete local repo
+    /// Remove all symlinks, uninstall crates, remove cron job, delete local repo
     Clean,
-    /// List all managed apps and dotfiles
+    /// List all managed crates and apps
     Ls,
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Setup { remote } => setup::run(&remote),
-        Command::Add { target } => setup::add(&target),
+        Command::Setup { remote } => setup::run(remote.as_deref()),
+        Command::Add { name, cargo } => setup::add(&name, cargo),
         Command::Backup => backup::run(),
         Command::Status => backup::status(),
         Command::Clean => clean::run(),
@@ -50,26 +54,20 @@ fn main() -> anyhow::Result<()> {
 
 fn ls() -> anyhow::Result<()> {
     let mf = manifest::load()?;
-    if mf.crates.is_empty() && mf.dotfiles.is_empty() {
-        println!("Nothing managed yet. Run `hmz add <app>` to start.");
+    if mf.crates.is_empty() && mf.apps.is_empty() {
+        println!("Nothing managed yet. Run `hmz add <name>` to start.");
         return Ok(());
     }
     if !mf.crates.is_empty() {
-        println!("Apps:");
+        println!("Crates:");
         for c in &mf.crates {
             println!("  {}", c);
         }
     }
-    if !mf.dotfiles.is_empty() {
-        println!("Dotfiles:");
-        for d in &mf.dotfiles {
-            println!("  {}", d);
-        }
-    }
-    if !mf.windows.is_empty() {
-        println!("Windows dotfiles:");
-        for w in &mf.windows {
-            println!("  {}", w);
+    if !mf.apps.is_empty() {
+        println!("Apps:");
+        for a in &mf.apps {
+            println!("  {}", a);
         }
     }
     Ok(())

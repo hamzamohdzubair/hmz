@@ -1,11 +1,11 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::manifest;
-use crate::paths;
+use crate::{manifest, paths, registry};
+use crate::registry::Loc;
 
 pub fn run() -> Result<()> {
     let repo = paths::repo_dir();
@@ -17,25 +17,31 @@ pub fn run() -> Result<()> {
     let mf = manifest::load().unwrap_or_default();
 
     for name in &mf.crates {
-        remove_symlink(&paths::xdg_data(name));
         remove_symlink(&paths::xdg_config(name));
+        remove_symlink(&paths::xdg_data(name));
         cargo_uninstall(name);
     }
 
-    for dotfile in &mf.dotfiles {
-        let src = expand(dotfile);
-        remove_symlink(&src);
+    for name in &mf.apps {
+        if let Ok(def) = registry::lookup(name) {
+            for loc in &def.locs {
+                match loc {
+                    Loc::XdgConfig => remove_symlink(&paths::xdg_config(name)),
+                    Loc::XdgData => remove_symlink(&paths::xdg_data(name)),
+                    Loc::WinAppData => {} // leave Windows files intact
+                    Loc::Home(rel) => remove_symlink(&paths::home().join(rel)),
+                }
+            }
+        }
     }
-
-    // Windows dotfiles are plain copies — nothing to remove on the Windows side.
 
     crate::cron::remove()?;
 
     fs::remove_dir_all(&repo)
         .with_context(|| format!("removing {}", repo.display()))?;
 
-    println!("Done. All symlinks removed, apps uninstalled, local repo deleted.");
-    println!("Your data remains safely in the remote GitHub repo.");
+    println!("Done. All symlinks removed, crates uninstalled, local repo deleted.");
+    println!("Your data remains safely in the remote repo.");
     Ok(())
 }
 
@@ -46,13 +52,9 @@ fn remove_symlink(path: &Path) {
 }
 
 fn cargo_uninstall(name: &str) {
-    let _ = Command::new("cargo").args(["uninstall", name]).status();
-}
-
-fn expand(input: &str) -> PathBuf {
-    if let Some(rest) = input.strip_prefix("~/") {
-        paths::home().join(rest)
-    } else {
-        PathBuf::from(input)
+    match Command::new("cargo").args(["uninstall", name]).status() {
+        Ok(s) if !s.success() => eprintln!("warning: cargo uninstall {} failed", name),
+        Err(e) => eprintln!("warning: could not run cargo uninstall {}: {}", name, e),
+        _ => {}
     }
 }
